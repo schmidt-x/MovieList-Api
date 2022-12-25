@@ -16,13 +16,9 @@ public class ActorService : IActorService
 	{
 		using var cnn = new SqlConnection(_connectionString);
 		
-		var getActorsSql =
-			@"SELECT Name from Actor";
+		var getActorsSql = "SELECT Id, Name, Info, Link from Actor";
 		
-		var actors = (await cnn.QueryAsync<ActorIdontKnowYet>(getActorsSql)).ToList(); // don't forget to check it with an empty return
-		
-		foreach(var actor in actors)
-			actor.Link = $"https://localhost:7777/Movies/Actor/{actor.Name.Replace(' ', '_')}";
+		var actors = (await cnn.QueryAsync<Actor>(getActorsSql)).ToList(); // don't forget to check it with an empty return
 		
 		var result = new ActorGet { Actors = actors, Count = actors.Count };
 		

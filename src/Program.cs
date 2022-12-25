@@ -25,7 +25,7 @@ public class Program
 		{
 			var result = await serviceM.GetMovies();
 			
-			if (!result.Any())
+			if (result.Count == 0)
 			{
 				ctx.Response.StatusCode = 404;
 				await ctx.Response.WriteAsync("Movies were not found");
@@ -38,23 +38,23 @@ public class Program
 		{
 			var result = await serviceM.GetMovies(name, age); // the use of the same method that returns all movies
 			
-			if (!result.Any())
+			if (result.Count == 0)
 			{
 				ctx.Response.StatusCode = 404;
 				await ctx.Response.WriteAsync("Movie was not found");
 				return;
 			}
-			await ctx.Response.WriteAsJsonAsync(result.First());
+			await ctx.Response.WriteAsJsonAsync(result.Movies!.First());
 		});
 		
 		app.MapGet("/Movies/Actor/{name}", async (HttpContext ctx, string name) =>
 		{
 			var result = await serviceM.GetMoviesBy(GetByArg.Actor, name);
 			
-			if (!result.Any())
+			if (result.Count == 0)
 			{
 				ctx.Response.StatusCode = 404;
-				await ctx.Response.WriteAsync("Actor was not found");
+				await ctx.Response.WriteAsync("Actor or movies with specified actor were not found");
 				return;
 			}
 			await ctx.Response.WriteAsJsonAsync(result);
@@ -64,10 +64,10 @@ public class Program
 		{
 			var result = await serviceM.GetMoviesBy(GetByArg.Genre, name);
 			
-			if (!result.Any())
+			if (result.Count == 0)
 			{
 				ctx.Response.StatusCode = 404;
-				await ctx.Response.WriteAsync("Genre was not found");
+				await ctx.Response.WriteAsync("Genre or movies with specified genre were not found");
 				return;
 			}
 			await ctx.Response.WriteAsJsonAsync(result);

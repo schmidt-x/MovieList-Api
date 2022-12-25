@@ -12,11 +12,13 @@ public class MovieService : IMovieService
 	public MovieService(IConfiguration config) => 
 		_connectionString = config.GetConnectionString("Default"); 
 	
-	public Task<List<MovieGet>> GetMovies(string? title = null, int? released = null)
+	public Task<MainMovie> GetMovies(string? title = null, int? released = null)
 	{
 		// if title and released are null, then is't called from Get/Movies and need to return all movies
 		var sql = 
-			@"select Movie.Id, Movie.Title, Movie.Duration, Movie.Released, Movie.Country, Actor.Id, Actor.Name, Actor.Info, Genre.Type
+			@"select Movie.Id, Movie.Title, Movie.Duration, Movie.Released, Movie.Country, 
+					Actor.Id, Actor.Name, Actor.Info, Actor.Link, 
+					Genre.Type, Genre.Link
 				from Movie
 				left outer join ActorMovie am on Movie.Id = am.Movie_id
 				left outer join Actor on Actor.Id = am.Actor_id
@@ -26,19 +28,19 @@ public class MovieService : IMovieService
 		if (title != null)
 		{
 			title = title.Replace('_', ' ');
-			sql += " where Movie.Title = @name";
+			sql += " where Movie.Title = @title";
 			if (released != null)
-				sql += " and Movie.Released = @age";
+				sql += " and Movie.Released = @released";
 		}
 		
 		return GetMoviesPrivate(sql, title, released);
 	}
 	
-	private async Task<List<MovieGet>> GetMoviesPrivate(string sql, string? title, int? released)
+	private async Task<MainMovie> GetMoviesPrivate(string sql, string? title, int? released)
 	{
 		using var db = new SqlConnection(_connectionString);
 		
-		var movies = await db.QueryAsync<MovieGet, Actor, string, MovieGet>(sql, (movie, actor, genre) =>
+		var movies = await db.QueryAsync<MovieGet, Actor, Genre, MovieGet>(sql, (movie, actor, genre) =>
 		{
 			if (actor != null)
 				movie.Actors = new() { actor };
@@ -46,7 +48,7 @@ public class MovieService : IMovieService
 				movie.Genres = new() { genre };
 			
 			return movie;
-		}, new { name = title, age = released } , splitOn: "Id, Type");
+		}, new { title, released } , splitOn: "Id, Type");
 		
 		var result = movies.GroupBy(m => m.Id).Select(g =>
 		{
@@ -55,8 +57,7 @@ public class MovieService : IMovieService
 			try
 			{
 				movie.Actors = g
-					.Select(m => m.Actors!
-					.Single())
+					.Select(m => m.Actors!.Single())
 					.DistinctBy(a => a.Id)
 					.ToList();
 			}
@@ -69,7 +70,7 @@ public class MovieService : IMovieService
 			{
 				movie.Genres = g
 					.Select(m => m.Genres!.Single())
-					.Distinct()
+					.DistinctBy(a => a.Type) // someday add by Id
 					.ToList();
 			}
 			catch(Exception)
@@ -81,19 +82,19 @@ public class MovieService : IMovieService
 			
 		}).ToList();
 		
-		return result;
+		return new MainMovie { Count = result.Count, Movies = result };
 	}
 	
-	public Task<List<GetMoviesBy>> GetMoviesBy(GetByArg arg, string name)
+	public Task<MoviesBy> GetMoviesBy(GetByArg arg, string name)
 	{
 		var sqlByActor = 
-		@"select Movie.Title from Movie
+		@"select Movie.Title, Movie.Link from Movie
 				 inner join ActorMovie am on Movie.Id = am.Movie_id
 				 inner join Actor on Actor.Id = am.Actor_id
 				 where Actor.Name = @name";
 		
 		var sqlByGenre = 
-			@"select Movie.Title from Movie
+			@"select Movie.Title, Movie.Link  from Movie
 				inner join GenreMovie gm on Movie.Id = gm.Movie_id
 				inner join Genre on Genre.Id = gm.Genre_id
 				where Genre.Type = @name";
@@ -106,15 +107,15 @@ public class MovieService : IMovieService
 		
 	}
 	
-	private async Task<List<GetMoviesBy>> GetMoviesByPrivate(string sql, string name)
+	private async Task<MoviesBy> GetMoviesByPrivate(string sql, string name)
 	{
 		using var db = new SqlConnection(_connectionString);
 		
-		var movies = await db.QueryAsync<string>(sql, new { name });
+		var movies = (await db.QueryAsync<MovieBy>(sql, new { name })).ToList();
 		
-		return (from movie in movies
-						let link = $"https://localhost:7777/Movies/{movie.Replace(' ', '_')}"
-						select new GetMoviesBy { Title = movie, Link = link }).ToList();
+		var result = new MoviesBy { Count = movies.Count, Movies = movies };
+		
+		return result;
 	}
 	
 	public Task<bool> SaveMovie(MoviePost movie) // json from the body
@@ -122,9 +123,9 @@ public class MovieService : IMovieService
 		#region SqlCommands
 		
 		const string saveMovieSql = 
-			@"INSERT INTO Movie (Title, Country, Duration, Released)
+			@"INSERT INTO Movie (Title, Country, Duration, Released, Link)
 				OUTPUT inserted.Id 
-				VALUES (@Title, @Country, @Duration, @Released)";
+				VALUES (@Title, @Country, @Duration, @Released, @Link)";
 		
 		const string saveActorsSql = 
 			@"MERGE INTO Actor as t
@@ -133,7 +134,7 @@ public class MovieService : IMovieService
 				WHEN MATCHED THEN
 					UPDATE SET t.Name = s.name
 				WHEN NOT MATCHED THEN
-					INSERT (Name, Info) VALUES (s.name, @Info)
+					INSERT (Name, Info, Link) VALUES (s.name, @Info, @Link)
 				OUTPUT inserted.Id;";
 		
 		const string saveGenresSql = 
@@ -143,7 +144,7 @@ public class MovieService : IMovieService
 				WHEN MATCHED THEN
 					UPDATE SET t.Type = s.type
 				WHEN NOT MATCHED THEN
-					INSERT (Type) VALUES (s.type)
+					INSERT (Type, Link) VALUES (s.type, @Link)
 				OUTPUT inserted.Id;";
 		
 		const string attachActorMovieSql = 
@@ -156,12 +157,27 @@ public class MovieService : IMovieService
 		
 		#endregion
 		
-		List<Actors> actors = movie.Actors;
-		List<Genres> genres = movie.Genres;
+		List<Actor> actors = movie.Actors;
+		List<Genre> genres = movie.Genres;
 		
-		// just adding some basic info about actors if it's not provided
-		foreach(var actor in actors.Where(act => act.Info == ""))
-			actor.Info = $"https://en.wikipedia.org/wiki/{actor.Name.Replace(' ', '_')}";
+		// adding link for the movie
+		var link = movie.Title.Replace(' ', '_');
+		movie.Link = $"https://localhost:7777/Movies/{link}/{movie.Released}";
+		
+		// adding Links and Info about actors
+		foreach(var actor in actors)
+		{
+			var replaced = actor.Name.Replace(' ', '_');
+			actor.Link = $"https://localhost:7777/Movies/Actor/{replaced}";
+			if (actor.Info == "")
+				actor.Info = $"https://en.wikipedia.org/wiki/{replaced}";
+		}
+		
+		// adding Links for genres
+		foreach(var genre in genres)
+		{
+			genre.Link = $"https://localhost:7777/Movies/Genre/{genre.Type}";
+		}
 		
 		// arrays to keep id's 
 		var actorIds = new ActorIds[actors.Count];
@@ -174,22 +190,25 @@ public class MovieService : IMovieService
 		{
 			// save movie and return id
 			var movieId = transaction.QueryFirstOrDefault<int>(saveMovieSql, movie); 
+			
 			// if returned 0, then there was a duplicate (Title and Released are unique)
 			if (movieId == 0)
 				return Task.FromResult(false);
 			
 			// saving each actor and getting id's
 			var j = 0;
-			foreach (var id in actors.Select(act => transaction.QueryFirst<int>(saveActorsSql, new { act.Name, act.Info })))
+			foreach (var actor in actors)
 			{
+				var id = transaction.QueryFirst<int>(saveActorsSql, new { actor.Name, actor.Info, actor.Link });
 				actorIds[j++] = new ActorIds { Id = id };
 			}
+			
 			// doing the same for genres
 			j = 0;
 			foreach(var genre in genres)
 			{
-				var id = transaction.QueryFirst<int>(saveGenresSql, new { genre.Type });
-				genreIds[j++] = new GenreIds() { Id = id };
+				var id = transaction.QueryFirst<int>(saveGenresSql, new { genre.Type, genre.Link });
+				genreIds[j++] = new GenreIds { Id = id };
 			}
 			
 			// saving each actors' id 

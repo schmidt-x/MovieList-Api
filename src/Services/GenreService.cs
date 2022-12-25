@@ -16,21 +16,12 @@ public class GenreService : IGenreService
 	{
 		using var cnn = new SqlConnection(_connectionString);
 		
-		var getGenresSql = 
-			@"SELECT Type FROM Genre";
+		var getGenresSql = "SELECT Type, Link FROM Genre";
 		
 		var genres = (await cnn.QueryAsync<Genre>(getGenresSql)).ToList();
 		
-		foreach(var genre in genres)
-			genre.Link = $"https://localhost:7777/Movies/Genre/{genre.Type}";
+		var result = new GenreGet { Genres = genres, Count = genres.Count };
 		
-		// var result = new GenreGet() { Genre = res, Count = res.Count };
-		
-		return new GenreGet() { Genres = genres, Count = genres.Count };
+		return result;
 	}
 }
-/*
-public async Task<Genre
-
-
-*/
