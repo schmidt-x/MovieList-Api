@@ -1,0 +1,5 @@
+﻿.idea/
+.editorconfig
+*user
+src/bin
+src/obj
