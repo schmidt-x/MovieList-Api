@@ -6,13 +6,13 @@ using MovieApi.Models;
 
 namespace MovieApi.Services;
 
-public class MovieService : IService
+public class MovieService : IMovieService
 {
 	private readonly string _connectionString;
 	public MovieService(IConfiguration config) => 
 		_connectionString = config.GetConnectionString("Default"); 
 	
-	public Task<List<Movie>> GetMovies(string? title = null, int? released = null)
+	public Task<List<MovieGet>> GetMovies(string? title = null, int? released = null)
 	{
 		// if title and released are null, then is't called from Get/Movies and need to return all movies
 		var sql = 
@@ -34,11 +34,11 @@ public class MovieService : IService
 		return GetMoviesPrivate(sql, title, released);
 	}
 	
-	private async Task<List<Movie>> GetMoviesPrivate(string sql, string? title, int? released)
+	private async Task<List<MovieGet>> GetMoviesPrivate(string sql, string? title, int? released)
 	{
 		using var db = new SqlConnection(_connectionString);
 		
-		var movies = await db.QueryAsync<Movie, Actor, string, Movie>(sql, (movie, actor, genre) =>
+		var movies = await db.QueryAsync<MovieGet, Actor, string, MovieGet>(sql, (movie, actor, genre) =>
 		{
 			if (actor != null)
 				movie.Actors = new() { actor };

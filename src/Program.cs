@@ -9,14 +9,21 @@ public class Program
 	public static void Main()
 	{
 		var builder = WebApplication.CreateBuilder();
-		builder.Services.AddSingleton<IService, MovieService>();
+		
+		builder.Services.AddSingleton<IMovieService, MovieService>();
+		builder.Services.AddSingleton<IGenreService, GenreService>();
+		builder.Services.AddSingleton<IActorService, ActorService>();
 		
 		var app = builder.Build();
-		var service = app.Services.GetRequiredService<IService>();
 		
+		var serviceM = app.Services.GetRequiredService<IMovieService>();
+		var serviceG = app.Services.GetRequiredService<IGenreService>();
+		var serviceA = app.Services.GetRequiredService<IActorService>();
+		
+		#region /Movie
 		app.MapGet("/Movies", async (ctx) =>
 		{
-			var result = await service.GetMovies();
+			var result = await serviceM.GetMovies();
 			
 			if (!result.Any())
 			{
@@ -29,7 +36,7 @@ public class Program
 		
 		app.MapGet("/Movies/{name}/{age:int?}", async (HttpContext ctx, string name, int? age) =>
 		{
-			var result = await service.GetMovies(name, age); // the use of the same method that returns all the movies
+			var result = await serviceM.GetMovies(name, age); // the use of the same method that returns all movies
 			
 			if (!result.Any())
 			{
@@ -42,7 +49,7 @@ public class Program
 		
 		app.MapGet("/Movies/Actor/{name}", async (HttpContext ctx, string name) =>
 		{
-			var result = await service.GetMoviesBy(GetByArg.Actor, name);
+			var result = await serviceM.GetMoviesBy(GetByArg.Actor, name);
 			
 			if (!result.Any())
 			{
@@ -55,7 +62,7 @@ public class Program
 		
 		app.MapGet("/Movies/Genre/{name}", async (HttpContext ctx, string name) =>
 		{
-			var result = await service.GetMoviesBy(GetByArg.Genre, name);
+			var result = await serviceM.GetMoviesBy(GetByArg.Genre, name);
 			
 			if (!result.Any())
 			{
@@ -68,7 +75,7 @@ public class Program
 		
 		app.MapPost("/Movies", async (HttpContext ctx, MoviePost movie) =>
 		{
-			var isSaved = await service.SaveMovie(movie);
+			var isSaved = await serviceM.SaveMovie(movie);
 			
 			if (!isSaved)
 			{
@@ -78,6 +85,34 @@ public class Program
 			
 			await ctx.Response.WriteAsync("The movie is added successfully");
 			
+		});
+		#endregion
+		
+		
+		app.MapGet("/Genre", async ctx =>
+		{
+			var result = await serviceG.GetGenresAsync();
+			
+			if (result.Count == 0)
+			{
+				await ctx.Response.WriteAsync("No Genres were found");
+				return;
+			}
+			
+			await ctx.Response.WriteAsJsonAsync(result);
+		});
+		
+		app.MapGet("/Actor", async ctx =>
+		{
+			var result = await serviceA.GetActorsAsync();
+			
+			if (result.Count == 0)
+			{
+				await ctx.Response.WriteAsync("No Actors were found");
+				return;
+			}
+			
+			await ctx.Response.WriteAsJsonAsync(result);
 		});
 		
 		
@@ -90,8 +125,9 @@ public class Program
 		// /Movies/{name}/{age?} - GetByName + ByAge (optional)
 		// /Movies/Actor/{name} - GetAllMoviesWithActor
 		// /Movies/Genre/{name} - GetAllMoviesWithGenre
-		// /Movies/Genres - GetAllGenres TODO
-		// /Movies/Actors - GetAllActors TODO
+		//
+		// /Genres - GetAllGenres
+		// /Actors - GetAllActors
 		
 		//Post
 		// /Movies - AddMovie (with actors and genres)
