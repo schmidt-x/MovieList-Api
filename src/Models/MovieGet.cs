@@ -1,9 +1,9 @@
 ﻿namespace MovieApi.Models;
 
-public class MainMovie
+public class MovieWrap
 {
 	public int Count { get; set; }
-	public List<MovieGet>? Movies { get; set; }
+	public IEnumerable<object> Movies { get; set; }
 }
 
 public class MovieGet
@@ -16,6 +16,12 @@ public class MovieGet
 	public List<Actor>? Actors { get; set; }
 	public List<Genre>? Genres { get; set; }
 }
+public class MovieGetFolded
+{
+	public string Title { get; set; } = String.Empty;
+	public int Released { get; set; }
+	public string Link { get; set; } = String.Empty;
+}
 
 public class Actor
 {
@@ -24,7 +30,6 @@ public class Actor
 	public string Info { get; set; } = String.Empty;
 	public string Link { get; set; } = String.Empty;
 }
-
 public class Genre
 {
 	public string Type { get; set; } = String.Empty;
@@ -32,7 +37,8 @@ public class Genre
 }
 
 
-public class MoviesBy
+
+public class MovieByWrap
 {
 	public int Count { get; set; }
 	public List<MovieBy>? Movies { get; set; }

@@ -4,7 +4,9 @@ namespace MovieApi.Services;
 
 public interface IMovieService
 {
-	Task<MainMovie> GetMovies(string? title = null, int? released = null);
-	Task<MoviesBy> GetMoviesBy(GetByArg arg, string name);
+	Task<MovieWrap> GetSingleAsync(string title, int? released = null);
+	Task<MovieWrap> GetAllAsync(int? from, int? to, bool folded);
+	// Task<MovieWrap> GetMoviesAsync();
+	Task<MovieByWrap> GetMoviesBy(GetBy arg, string name);
 	Task<bool> SaveMovie(MoviePost movie);
 }

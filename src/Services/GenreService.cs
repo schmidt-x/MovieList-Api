@@ -1,4 +1,5 @@
-﻿using System.Data.SqlClient;
+﻿using System.Data;
+using System.Data.SqlClient;
 using Dapper;
 using Microsoft.Extensions.Configuration;
 using MovieApi.Models;
@@ -11,10 +12,12 @@ public class GenreService : IGenreService
 	
 	public GenreService(IConfiguration config)
 		=> _connectionString = config.GetConnectionString("Default");
+		
+	private IDbConnection CreateConnection() => new SqlConnection(_connectionString);
 	
 	public async Task<GenreGet> GetGenresAsync()
 	{
-		using var cnn = new SqlConnection(_connectionString);
+		using var cnn = CreateConnection();
 		
 		var getGenresSql = "SELECT Type, Link FROM Genre";
 		
