@@ -18,33 +18,55 @@ public class MovieController : ControllerBase
 	}
 	
 	[HttpGet]
-	public async Task<ActionResult<MovieWrap>> GetAll(int? from, int? to, bool folded = false)
+	public async Task<ActionResult<MovieWrap>> GetAll(int? from, int? to, bool unfolded = false, string? orderBy = null, bool desc = false)
 	{
-		var result = await _mService.GetAllAsync(from, to, folded);
+		var result = await _mService.GetAllAsync(from, to, unfolded, orderBy, desc);
 		
 		return result.Count != 0
 			? Ok(result)
 			: NoContent();
 	}
 	
-	[HttpGet("{name}/{released:int?}")]
-	public async Task<ActionResult<MovieGet>> Get(string name, int? released)
+	[HttpGet("{title}/{released:int?}")]
+	public async Task<IActionResult> Get(string title, int? released = null)
 	{
-		var result = await _mService.GetSingleAsync(name, released);
+		var result = await _mService.GetSingleAsync(title, released);
 		
-		return result.Count != 0
-			? Ok(result.Movies.First())
+		return result != null
+			? Ok(result)
 			: NoContent();
 	}
 	
-	// [HttpGet("Actor/{name}")]
-	// public async Task<ActionResult<MovieWrap>> GetBy(string name)
-	// {
+	[HttpGet("Actor/{name}")]
+	public async Task<IActionResult> GetAllByActor(string name, string? orderBy = null, bool desc = false)
+	{
+		var result = await _mService.GetAllByAsync(GetBy.Actor, name, orderBy, desc);
 		
-		
-		
-		// throw new NotImplementedException();
-	// }
+		return result.Count != 0
+			? Ok(result)
+			: NoContent();
+	}
 	
+	[HttpGet("Genre/{type}")]
+	public async Task<IActionResult> GetAllByGenre(string type, string? orderBy = null, bool desc = false)
+	{
+		var result = await _mService.GetAllByAsync(GetBy.Genre, type, orderBy, desc);
+		
+		return result.Count != 0
+			? Ok(result)
+			: NoContent();
+	}
+	
+	
+	
+	
+	// [HttpPost]
+	// public async Task<IActionResult> SaveMovie()
+	// {
+	// 	
+	// 	
+	// 	
+	// 	throw new NotImplementedException();
+	// }
 	
 }

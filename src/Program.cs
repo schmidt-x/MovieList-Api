@@ -33,57 +33,6 @@ public class Program
 		var serviceA = app.Services.GetRequiredService<IActorService>();
 		
 		#region /Movie
-		// app.MapGet("/Movie", async (HttpContext ctx, int? fromDate, int? toDate) => // TODO
-		// {
-		// 	var result = await serviceM.GetMovies();
-		// 	
-		// 	if (result.Count == 0)
-		// 	{
-		// 		ctx.Response.StatusCode = 404;
-		// 		await ctx.Response.WriteAsync("Movies were not found");
-		// 		return;
-		// 	}
-		// 	await ctx.Response.WriteAsJsonAsync(result);
-		// });
-		
-		// app.MapGet("/Movie/{name}/{age:int?}", async (HttpContext ctx, string name, int? age) =>
-		// {
-		// 	var result = await serviceM.GetMovies(name, age); // the use of the same method that returns all movies
-		// 	
-		// 	if (result.Count == 0)
-		// 	{
-		// 		ctx.Response.StatusCode = 404;
-		// 		await ctx.Response.WriteAsync("Movie was not found");
-		// 		return;
-		// 	}
-		// 	await ctx.Response.WriteAsJsonAsync(result.Movies!.First());
-		// });
-		
-		app.MapGet("/Movie/Actor/{name}", async (HttpContext ctx, string name) =>
-		{
-			var result = await serviceM.GetMoviesBy(GetBy.Actor, name);
-			
-			if (result.Count == 0)
-			{
-				ctx.Response.StatusCode = 404;
-				await ctx.Response.WriteAsync("Actor or movies with specified actor were not found");
-				return;
-			}
-			await ctx.Response.WriteAsJsonAsync(result);
-		});
-		
-		app.MapGet("/Movie/Genre/{name}", async (HttpContext ctx, string name) =>
-		{
-			var result = await serviceM.GetMoviesBy(GetBy.Genre, name);
-			
-			if (result.Count == 0)
-			{
-				ctx.Response.StatusCode = 404;
-				await ctx.Response.WriteAsync("Genre or movies with specified genre were not found");
-				return;
-			}
-			await ctx.Response.WriteAsJsonAsync(result);
-		});
 		
 		app.MapPost("/Movie", async (HttpContext ctx, MoviePost movie) =>
 		{
@@ -147,13 +96,21 @@ public class Program
 		
 		
 		// Get
-		// /Movies - GetAllMovies //TODO replace Movies to Movie
-		// /Movies/{name}/{age?} - GetByName + ByAge (optional)
-		// /Movies/Actor/{name} - GetAllMoviesWithActor
-		// /Movies/Genre/{name} - GetAllMoviesWithGenre
-		//
-		// /Genre - GetAllGenres
-		// /Actor - GetAllActors
+		// /Movie(?unfolded=bool&from=int&to=int&sortBy=string,desc=true) = return all the movies 
+		//		unfolded = in an unfolded form
+		//		from - to = filter the movies by released date
+		//		sortBy=title,released,duration = return sorted
+		//		+ desc = as optional to sortBy
+		
+		// /Movies/{title}/{released?} = return a single movie by Title + Released date as optional
+		
+		// /Movies/Actor/{name}(orderBy=string, desc=true) = return all the movies with an Actor
+		
+		// /Movies/Genre/{type}(orderBy=string, desc=true) = return all the movies with a type of a Genre
+		
+		// 
+		// 
+		// 
 		
 		//Post
 		// /Movies - AddMovie (with actors and genres)

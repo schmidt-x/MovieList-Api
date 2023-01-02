@@ -6,7 +6,7 @@ public class MovieWrap
 	public IEnumerable<object> Movies { get; set; }
 }
 
-public class MovieGet
+public class MovieGetUnfolded
 {
 	public int Id { get; set; }
 	public string? Title { get; set; }
@@ -16,7 +16,7 @@ public class MovieGet
 	public List<Actor>? Actors { get; set; }
 	public List<Genre>? Genres { get; set; }
 }
-public class MovieGetFolded
+public class MovieGet
 {
 	public string Title { get; set; } = String.Empty;
 	public int Released { get; set; }
@@ -34,19 +34,6 @@ public class Genre
 {
 	public string Type { get; set; } = String.Empty;
 	public string? Link { get; set; }
-}
-
-
-
-public class MovieByWrap
-{
-	public int Count { get; set; }
-	public List<MovieBy>? Movies { get; set; }
-}
-public class MovieBy
-{
-	public string Title { get; set; } = string.Empty;
-	public string Link { get; set; } = string.Empty; 
 }
 
 

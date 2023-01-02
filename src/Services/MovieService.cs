@@ -1,6 +1,5 @@
 ﻿using System.Data;
 using System.Data.SqlClient;
-using System.Threading;
 using Dapper;
 using Dapper.Transaction;
 using Microsoft.Extensions.Configuration;
@@ -12,17 +11,26 @@ namespace MovieApi.Services;
 public class MovieService : IMovieService
 {
 	private readonly string _connectionString;
+	private readonly Dictionary<string, string> _orderByDic;
 	
-	public MovieService(IConfiguration config) => 
+	public MovieService(IConfiguration config)
+	{
 		_connectionString = config.GetConnectionString("Default");
+		_orderByDic = new()
+		{
+			{"title", " ORDER BY Movie.Title"},
+			{"released", " ORDER BY Movie.Released"},
+			{"duration", " ORDER BY Movie.Duration"}
+		};
+	} 
 		
 	private IDbConnection CreateConnection() => new SqlConnection(_connectionString);
 	
-	
-	
-	public Task<MovieWrap> GetSingleAsync(string title, int? released = null)
+
+
+	public async Task<MovieGetUnfolded?> GetSingleAsync(string title, int? released)
 	{
-		var sql = MovieSql.GetMovies;
+		var sql = MovieSql.GetMoviesUnfolded;
 		
 		title = title.Replace('_', ' ');
 		sql += " where Movie.Title = @title";
@@ -30,43 +38,57 @@ public class MovieService : IMovieService
 		if (released != null)
 			sql += " and Movie.Released = @released";
 		
-		return GetAllAsync(sql, title, released);
+		var result = await GetAllUnfoldedAsync(sql, title, released);
+		
+		return result.Movies.FirstOrDefault() as MovieGetUnfolded;
 	}
 	
 	
-	public Task<MovieWrap> GetAllAsync(int? from, int? to, bool folded)
+	public Task<MovieWrap> GetAllAsync(int? from, int? to, bool unfolded, string? orderBy, bool desc)
 	{
-		var sql = folded
-			? MovieSql.GetMoviesFolded
+		var sql = unfolded
+			? MovieSql.GetMoviesUnfolded
 			: MovieSql.GetMovies;
 		
+		
 		if (from != null || to != null)
-			sql += GetConditionSql(from, to);
+			sql += AddConditions(from, to);
 			
-		return folded
-			? GetAllFoldedAsync(sql, from, to)
-			: GetAllAsync(sql, from: from, to: to);
+		if (orderBy != null && _orderByDic.ContainsKey(orderBy))
+			sql += AddOrdering(orderBy, desc);
+		
+		return unfolded
+			? GetAllUnfoldedAsync(sql, from: from, to: to)
+			: GetAllAsync(sql, from, to);
 	}
 	
-	private string GetConditionSql(int? from, int? to)
+	private string AddOrdering(string orderBy, bool desc)
 	{
-		string sql = "";
+		string sql = _orderByDic[orderBy];
+		if (desc) sql += " DESC";
+		
+		return sql;
+	}
+	private string AddConditions(int? from, int? to)
+	{
+		string sql;
 		if (from != null)
 		{
-			sql += " where Movie.Released >= @from";
+			sql = " where Movie.Released >= @from";
 			if (to != null)
 				sql += " and Movie.Released <= @to";
 		}
 		else
-			sql += " where Movie.Released <= @to";
+			sql = " where Movie.Released <= @to";
 		return sql;
 	}
 	
-	private async Task<MovieWrap> GetAllAsync(string sql, string? title = null, int? released = null, int? from = null, int? to = null)
+	private async Task<MovieWrap> GetAllUnfoldedAsync
+		(string sql, string? title = null, int? released = null, int? from = null, int? to = null)
 	{
 		using var cnn = CreateConnection();
 		
-		var movies = await cnn.QueryAsync<MovieGet, Actor, Genre, MovieGet>(sql, (movie, actor, genre) =>
+		var movies = await cnn.QueryAsync<MovieGetUnfolded, Actor, Genre, MovieGetUnfolded>(sql, (movie, actor, genre) =>
 		{
 			if (actor != null)
 				movie.Actors = new() { actor };
@@ -111,28 +133,27 @@ public class MovieService : IMovieService
 		return new MovieWrap { Count = result.Count, Movies = result }; // covariance baby)
 	}
 	
-	private async Task<MovieWrap> GetAllFoldedAsync(string sql, int? from = null, int? to = null)
+	private async Task<MovieWrap> GetAllAsync(string sql, int? from = null, int? to = null, string? byArg = null)
 	{
 		using var cnn = CreateConnection();
 		
-		var movies = (await cnn.QueryAsync<MovieGetFolded>(sql, new { from, to })).ToList(); // TODO twice toList??? 
+		var movies = (await cnn.QueryAsync<MovieGet>(sql, new { from, to, byArg })).ToList(); // TODO twice toList??? 
 		
 		return new MovieWrap { Count = movies.Count, Movies = movies };
 	} 
 	
-	
-	public Task<MovieByWrap> GetMoviesBy(GetBy arg, string name) // TODO
+	public Task<MovieWrap> GetAllByAsync(GetBy arg, string byArg, string? orderBy, bool desc)
 	{
 		string sql;
 		
 		switch (arg)
 		{
 			case GetBy.Actor:
-				sql = MovieSql.GetByActor;
-				name = name.Replace('_', ' ');
+				byArg = byArg.Replace('_', ' ');
+				sql = MovieSql.ByActor;
 				break;
 			case GetBy.Genre:
-				sql = MovieSql.GetByGenre;
+				sql = MovieSql.ByGenre;
 				break;
 			case GetBy.Country:
 				throw new NotImplementedException();
@@ -140,88 +161,46 @@ public class MovieService : IMovieService
 				throw new ArgumentException("there is no way it can reach here");
 		}
 		
-		return GetMoviesByPrivate(sql, name);
+		if (orderBy != null && _orderByDic.ContainsKey(orderBy))
+			sql += AddOrdering(orderBy, desc);
+		
+		return GetAllAsync(sql, byArg: byArg);
 	}
 	
-	private async Task<MovieByWrap> GetMoviesByPrivate(string sql, string name)
-	{
-		using var cnn = CreateConnection();
-		
-		var movies = (await cnn.QueryAsync<MovieBy>(sql, new { name })).ToList();
-		
-		var result = new MovieByWrap { Count = movies.Count, Movies = movies };
-		
-		return result;
-	}
 	
 	public Task<bool> SaveMovie(MoviePost movie) // json from the body
 	{
 		List<Actor> actors = movie.Actors;
 		List<Genre> genres = movie.Genres;
 		
-		// adding link for the movie
-		var link = movie.Title.Replace(' ', '_');
-		movie.Link = $"https://localhost:7777/Movie/{link}/{movie.Released}";
-		
-		// adding Links and Info about actors
+		// adding some basic Info about actors
 		foreach(var actor in actors)
 		{
-			var replaced = actor.Name.Replace(' ', '_');
-			actor.Link = $"https://localhost:7777/Movie/Actor/{replaced}";
+			if (actor.Info != "") continue;
 			
-			if (actor.Info == "")
-				actor.Info = $"https://en.wikipedia.org/wiki/{replaced}";
+			var replaced = actor.Name.Replace(' ', '_');
+			actor.Info = $"https://en.wikipedia.org/wiki/{replaced}";
 		}
 		
-		// adding Links for genres
-		foreach(var genre in genres)
-			genre.Link = $"https://localhost:7777/Movie/Genre/{genre.Type}";
-		
-		// arrays to store id's 
-		var actorIds = new ActorIds[actors.Count];
-		var genreIds = new GenreIds[genres.Count];
-		
-		return SaveMovie(movie, actors, genres, actorIds, genreIds);
+		return SaveMovie(movie, actors, genres);
 	}
 	
-	private Task<bool> SaveMovie(MoviePost movie, List<Actor> actors, List<Genre> genres, ActorIds[] actorIds, GenreIds[] genreIds)
+	private Task<bool> SaveMovie(MoviePost movie, List<Actor> actors, List<Genre> genres)
 	{
 		try
 		{
 			using var cnn = CreateConnection();
 			cnn.Open();
-
 			using var transaction = cnn.BeginTransaction();
-			// save movie and return id
-			var movieId = transaction.QueryFirstOrDefault<int>(MovieSql.SaveMovie, movie); 
-				
-			// if returned 0, then there was a duplicate (Title and Released are unique)
-			if (movieId == 0)
-				return Task.FromResult(false);
-				
-			// saving each actor returning id's
-			var j = 0;
-			foreach (var actor in actors)
-			{
-				var id = transaction.QueryFirst<int>(MovieSql.SaveActors, new { actor.Name, actor.Info, actor.Link });
-				actorIds[j++] = new ActorIds { Id = id };
-			}
-				
-			// doing the same for genres
-			j = 0;
+			
+			var movieId = transaction.QuerySingleOrDefault<int>(MovieSql.SaveMovie, movie);
+			if (movieId == 0) return Task.FromResult(false);
+			
+			foreach(var actor in actors)
+				transaction.Execute(MovieSql.SaveActors, new { actor.Name, actor.Info, movieId });
+			
 			foreach(var genre in genres)
-			{
-				var id = transaction.QueryFirst<int>(MovieSql.SaveGenres, new { genre.Type, genre.Link });
-				genreIds[j++] = new GenreIds { Id = id };
-			}
-				
-			// saving each actors' id 
-			foreach(var actor in actorIds)
-				transaction.Execute(MovieSql.LinkActorMovie, new { actor.Id, movieId });
-				
-			// doing the same for genres
-			foreach(var genre in genreIds)
-				transaction.Execute(MovieSql.LinkGenreMovie, new { genre.Id, movieId });
+				transaction.Execute(MovieSql.SaveGenres, new { genre.Type, movieId });
 				
 			transaction.Commit();
 		}
