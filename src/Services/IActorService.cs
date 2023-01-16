@@ -4,5 +4,5 @@ namespace MovieApi.Services;
 
 public interface IActorService
 {
-	Task<ActorGet> GetActorsAsync();
+	Task<ActorWrap> GetActorsAsync();
 }

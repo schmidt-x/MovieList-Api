@@ -4,8 +4,8 @@ namespace MovieApi.Services;
 
 public interface IMovieService
 {
-	Task<MovieGetUnfolded?> GetSingleAsync(string title, int? released);
-	Task<MovieWrap> GetAllAsync(int? from, int? to, bool unfolded, string? orderBy, bool desc);
-	Task<MovieWrap> GetAllByAsync(GetBy arg, string byArg, string? orderBy, bool desc);
-	Task<bool> SaveMovie(MoviePost movie);
+	Task<MovieGet?> GetByIdAsync(int id);
+	Task<MovieWrap> GetAllAsync(int? from, int? to, string? orderBy, bool desc);
+	Task<MovieWrap> GetAllByAsync(int id, GetBy arg, int? from, int? to, string? orderBy, bool desc);
+	Task<string> SaveMovie(MoviePost movie);
 }

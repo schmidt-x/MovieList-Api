@@ -4,5 +4,5 @@ namespace MovieApi.Services;
 
 public interface IGenreService
 {
-	Task<GenreGet> GetGenresAsync();
+	Task<GenreWrap> GetGenresAsync();
 }

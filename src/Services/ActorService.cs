@@ -8,14 +8,14 @@ namespace MovieApi.Services;
 
 public class ActorService : IActorService
 {
-	private readonly string _connectionString;
+	private readonly string? _connectionString;
 	
 	public ActorService(IConfiguration config)
 		=> _connectionString = config.GetConnectionString("Default");
 		
 	private IDbConnection CreateConnection() => new SqlConnection(_connectionString);
 	
-	public async Task<ActorGet> GetActorsAsync()
+	public async Task<ActorWrap> GetActorsAsync()
 	{
 		using var cnn = CreateConnection();
 		
@@ -23,7 +23,7 @@ public class ActorService : IActorService
 		
 		var actors = (await cnn.QueryAsync<Actor>(getActorsSql)).ToList();
 		
-		var result = new ActorGet { Actors = actors, Count = actors.Count };
+		var result = new ActorWrap { Actors = actors, Count = actors.Count };
 		
 		return result;
 	}

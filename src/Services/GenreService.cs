@@ -15,7 +15,7 @@ public class GenreService : IGenreService
 		
 	private IDbConnection CreateConnection() => new SqlConnection(_connectionString);
 	
-	public async Task<GenreGet> GetGenresAsync()
+	public async Task<GenreWrap> GetGenresAsync()
 	{
 		using var cnn = CreateConnection();
 		
@@ -23,7 +23,7 @@ public class GenreService : IGenreService
 		
 		var genres = (await cnn.QueryAsync<Genre>(getGenresSql)).ToList();
 		
-		var result = new GenreGet { Genres = genres, Count = genres.Count };
+		var result = new GenreWrap { Genres = genres, Count = genres.Count };
 		
 		return result;
 	}

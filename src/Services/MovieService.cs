@@ -5,220 +5,183 @@ using Dapper.Transaction;
 using Microsoft.Extensions.Configuration;
 using MovieApi.Models;
 using MovieApi.SqlQueries;
+using Serilog;
 
 namespace MovieApi.Services;
 
 public class MovieService : IMovieService
 {
-	private readonly string _connectionString;
-	private readonly Dictionary<string, string> _orderByDic;
-	
+	private readonly string? _connectionString;
+	private readonly Dictionary<string, string> _orderBy;
+	private IDbConnection CreateConnection() => new SqlConnection(_connectionString);
 	public MovieService(IConfiguration config)
 	{
 		_connectionString = config.GetConnectionString("Default");
-		_orderByDic = new()
+		_orderBy = new()
 		{
 			{"title", " ORDER BY Movie.Title"},
 			{"released", " ORDER BY Movie.Released"},
 			{"duration", " ORDER BY Movie.Duration"}
 		};
-	} 
-		
-	private IDbConnection CreateConnection() => new SqlConnection(_connectionString);
-	
-
-
-	public async Task<MovieGetUnfolded?> GetSingleAsync(string title, int? released)
-	{
-		var sql = MovieSql.GetMoviesUnfolded;
-		
-		title = title.Replace('_', ' ');
-		sql += " where Movie.Title = @title";
-		
-		if (released != null)
-			sql += " and Movie.Released = @released";
-		
-		var result = await GetAllUnfoldedAsync(sql, title, released);
-		
-		return result.Movies.FirstOrDefault() as MovieGetUnfolded;
 	}
 	
 	
-	public Task<MovieWrap> GetAllAsync(int? from, int? to, bool unfolded, string? orderBy, bool desc)
+	public async Task<MovieGet?> GetByIdAsync(int id)
 	{
-		var sql = unfolded
-			? MovieSql.GetMoviesUnfolded
-			: MovieSql.GetMovies;
+		try
+		{
+			using var cnn = CreateConnection();
 		
+			var unsorted = await cnn.QueryAsync<MovieGet, Actor, Genre, MovieGet>(MovieSql.GetById, (movie, actor, genre) =>
+			{
+				if (actor != null)
+					movie.Actors = new() { actor };
+				if (genre != null)
+					movie.Genres = new() { genre };
+				
+				return movie;
+			}, new { movieId = id }, splitOn: "Id, Id");
+			
+			var result = unsorted.GroupBy(g => g.Id).Select(g =>
+			{
+				var movie = g.First();
+				
+				if (movie.Actors != null)
+				{
+					movie.Actors = g
+						.Select(s => s.Actors!.First())
+						.DistinctBy(k => k.Id)
+						.ToList();
+				}
+					
+				if (movie.Genres != null)
+				{
+					movie.Genres = g
+						.Select(s => s.Genres!.First())
+						.DistinctBy(k => k.Id)
+						.ToList();
+				}
+			
+				return movie;
+			}).FirstOrDefault();
+			
+			return result;
+		}
+		catch(Exception e)
+		{
+			Log.Error(e, "Something went wrong");
+			throw;
+		}
+	} 
+	public Task<MovieWrap> GetAllAsync(int? from, int? to, string? orderBy, bool desc)
+	{
+		var sql = MovieSql.GetAll;
 		
 		if (from != null || to != null)
-			sql += AddConditions(from, to);
+			sql += AddConditions(from, to, false);
 			
-		if (orderBy != null && _orderByDic.ContainsKey(orderBy))
+		if (orderBy != null && _orderBy.ContainsKey(orderBy))
 			sql += AddOrdering(orderBy, desc);
 		
-		return unfolded
-			? GetAllUnfoldedAsync(sql, from: from, to: to)
-			: GetAllAsync(sql, from, to);
+		return GetAllAsync(sql, from, to);
 	}
-	
-	private string AddOrdering(string orderBy, bool desc)
+	public Task<MovieWrap> GetAllByAsync(int id, GetBy arg, int? from, int? to, string? orderBy, bool desc)
 	{
-		string sql = _orderByDic[orderBy];
-		if (desc) sql += " DESC";
-		
-		return sql;
-	}
-	private string AddConditions(int? from, int? to)
-	{
-		string sql;
-		if (from != null)
+		string sql = arg switch
 		{
-			sql = " where Movie.Released >= @from";
-			if (to != null)
-				sql += " and Movie.Released <= @to";
-		}
-		else
-			sql = " where Movie.Released <= @to";
-		return sql;
-	}
-	
-	private async Task<MovieWrap> GetAllUnfoldedAsync
-		(string sql, string? title = null, int? released = null, int? from = null, int? to = null)
-	{
-		using var cnn = CreateConnection();
+			GetBy.Actor => MovieSql.ByActor,
+			GetBy.Genre => MovieSql.ByGenre,
+			_ => throw new Exception()
+		};
 		
-		var movies = await cnn.QueryAsync<MovieGetUnfolded, Actor, Genre, MovieGetUnfolded>(sql, (movie, actor, genre) =>
-		{
-			if (actor != null)
-				movie.Actors = new() { actor };
-			if (genre != null)
-				movie.Genres = new() { genre };
-			
-			return movie;
-		}, new { title, released, from, to } , splitOn: "Id, Type");
+		if (from != null || to != null)
+			sql += AddConditions(from, to, true);
 		
-		var result = movies.GroupBy(m => m.Id).Select(g =>
-		{
-			var movie = g.First();
-			
-			try
-			{
-				movie.Actors = g
-					.Select(m => m.Actors!.Single())
-					.DistinctBy(a => a.Id)
-					.ToList();
-			}
-			catch(Exception)
-			{
-				movie.Actors = null;
-			}
-			
-			try
-			{
-				movie.Genres = g
-					.Select(m => m.Genres!.Single())
-					.DistinctBy(a => a.Type) // TODO someday add by Id
-					.ToList();
-			}
-			catch(Exception)
-			{
-				movie.Genres = null;
-			}
-			
-			return movie;
-			
-		}).ToList();
-		
-		return new MovieWrap { Count = result.Count, Movies = result }; // covariance baby)
-	}
-	
-	private async Task<MovieWrap> GetAllAsync(string sql, int? from = null, int? to = null, string? byArg = null)
-	{
-		using var cnn = CreateConnection();
-		
-		var movies = (await cnn.QueryAsync<MovieGet>(sql, new { from, to, byArg })).ToList(); // TODO twice toList??? 
-		
-		return new MovieWrap { Count = movies.Count, Movies = movies };
-	} 
-	
-	public Task<MovieWrap> GetAllByAsync(GetBy arg, string byArg, string? orderBy, bool desc)
-	{
-		string sql;
-		
-		switch (arg)
-		{
-			case GetBy.Actor:
-				byArg = byArg.Replace('_', ' ');
-				sql = MovieSql.ByActor;
-				break;
-			case GetBy.Genre:
-				sql = MovieSql.ByGenre;
-				break;
-			case GetBy.Country:
-				throw new NotImplementedException();
-			default:
-				throw new ArgumentException("there is no way it can reach here");
-		}
-		
-		if (orderBy != null && _orderByDic.ContainsKey(orderBy))
+		if (orderBy != null && _orderBy.ContainsKey(orderBy))
 			sql += AddOrdering(orderBy, desc);
 		
-		return GetAllAsync(sql, byArg: byArg);
+		return GetAllAsync(sql, from, to, id);
 	}
-	
-	
-	public Task<bool> SaveMovie(MoviePost movie) // json from the body
+	public Task<string> SaveMovie(MoviePost movie)
 	{
-		List<Actor> actors = movie.Actors;
-		List<Genre> genres = movie.Genres;
-		
-		// adding some basic Info about actors
-		foreach(var actor in actors)
+		foreach(var actor in movie.Actors)
 		{
 			if (actor.Info != "") continue;
-			
 			var replaced = actor.Name.Replace(' ', '_');
 			actor.Info = $"https://en.wikipedia.org/wiki/{replaced}";
 		}
 		
-		return SaveMovie(movie, actors, genres);
+		return SaveMovieOnTransactAsync(movie);
 	}
 	
-	private Task<bool> SaveMovie(MoviePost movie, List<Actor> actors, List<Genre> genres)
+	
+	private string AddOrdering(string orderBy, bool desc)
 	{
+		string sql = _orderBy[orderBy];
+		if (desc) sql += " DESC";
+		
+		return sql;
+	}
+	private string AddConditions(int? from, int? to, bool hasCondition)
+	{
+		string sql = hasCondition
+			? " AND"
+			: " WHERE";
+		
+		if (from != null)
+		{
+			sql += " Movie.Released >= @from";
+			if (to != null)
+				sql += " AND Movie.Released <= @to";
+		}
+		else
+			sql += " Movie.Released <= @to";
+		
+		return sql;
+	}
+	private async Task<MovieWrap> GetAllAsync(string sql, int? from, int? to, int? byId = null)
+	{
+		using var cnn = CreateConnection();
+		
+		var movies = (await cnn.QueryAsync<MoviesGet>(sql, new { from, to, byId })).ToList();
+		
+		return new MovieWrap { Count = movies.Count, Movies = movies };
+	}
+	private async Task<string> SaveMovieOnTransactAsync(MoviePost movie)
+	{
+		string movieLink;
 		try
 		{
 			using var cnn = CreateConnection();
 			cnn.Open();
 			using var transaction = cnn.BeginTransaction();
 			
-			var movieId = transaction.QuerySingleOrDefault<int>(MovieSql.SaveMovie, movie);
-			if (movieId == 0) return Task.FromResult(false);
+			using var multi = await transaction.QueryMultipleAsync(MovieSql.SaveMovie, movie);
+			var matched = await multi.ReadFirstAsync<bool>();
+			var movieId = await multi.ReadFirstAsync<int>();
+			movieLink = $"https://localhost:7777/Movie/{movieId}";
 			
-			foreach(var actor in actors)
-				transaction.Execute(MovieSql.SaveActors, new { actor.Name, actor.Info, movieId });
+			if (matched)
+			{
+				Log.Information("Movie duplicate");
+				return "This movie is added before\n" + movieLink;
+			}
 			
-			foreach(var genre in genres)
-				transaction.Execute(MovieSql.SaveGenres, new { genre.Type, movieId });
-				
+			foreach(var actor in movie.Actors)
+				await transaction.ExecuteAsync(MovieSql.SaveActors, new { actor.Name, actor.Info, movieId });
+			
+			foreach(var genre in movie.Genres)
+				await transaction.ExecuteAsync(MovieSql.SaveGenres, new { genre.Type, movieId });
 			transaction.Commit();
 		}
-		catch(Exception)
+		catch(Exception e)
 		{
-			// Log.Error ..
-			return Task.FromResult(false);
+			Log.Error(e, "something went wrong");
+			throw;
 		}
 		
-		// Log.Information ..
-		return Task.FromResult(true);
+		Log.Information("Movie is saved"); 
+		return "The movie is saved successfully\n" + movieLink;
 	}
 	
-}
-
-public enum GetBy
-{
-	Actor = 1,
-	Genre,
-	Country // TODO not implemented yet
 }
