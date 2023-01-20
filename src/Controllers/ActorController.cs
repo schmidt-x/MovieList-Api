@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using MovieApi.DTOs;
 using MovieApi.Services;
+using MovieApi.SqlQueries;
 
 namespace MovieApi.Controllers;
 
@@ -7,17 +9,41 @@ namespace MovieApi.Controllers;
 [Route("[controller]")]
 public class ActorController : ControllerBase
 {
-	private readonly IActorService _aService;
-	public ActorController(IActorService aService)
+	private readonly IMemberService _membersService;
+	public ActorController(IMemberService membersService) =>
+		_membersService = membersService;
+	
+	[HttpGet]
+	public async Task<IActionResult> GetAll()
 	{
-		_aService = aService;
+		try
+		{
+			var result = await _membersService.GetAllAsync<ActorGet>(ActorSql.GetAll);
+			
+			return result.Count != 0
+				? Ok(result)
+				: NotFound("Couldn't find any actor");
+		}
+		catch
+		{
+			return Problem();
+		}
 	}
 	
-	[HttpGet("Actor")]
-	public Task<IActionResult> GetAll()
+	[HttpDelete("{id:int}")]
+	public async Task<IActionResult> Delete(int id)
 	{
-		// var result = 
-		throw new NotImplementedException();
+		try
+		{
+			var isDeleted = await _membersService.DeleteAsync(id, ActorSql.Delete);
+			return isDeleted
+				? Ok("Actor deleted")
+				: NotFound("Couldn't find the actor");
+		}
+		catch
+		{
+			return Problem();
+		}
 		
 	}
 }

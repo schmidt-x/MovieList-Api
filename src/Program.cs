@@ -11,13 +11,12 @@ public class Program
 		
 		builder.Host.UseSerilog((_, config) =>
 			config.ReadFrom.Configuration(builder.Configuration));
-		
+			
 		builder.Services.AddHttpContextAccessor(); // for Serilog.Enrichers 
 		builder.Services.AddControllers();
 		
 		builder.Services.AddSingleton<IMovieService, MovieService>();
-		builder.Services.AddSingleton<IActorService, ActorService>();
-		builder.Services.AddSingleton<IGenreService, GenreService>();
+		builder.Services.AddSingleton<IMemberService, MemberService>();
 		
 		var app = builder.Build();
 		

@@ -1,5 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using MovieApi.Models;
+using MovieApi.DTOs;
 using MovieApi.Services;
 
 namespace MovieApi.Controllers;
@@ -23,33 +23,46 @@ public class MovieController : ControllerBase
 			
 			return result != null
 				? Ok(result)
-				: NoContent();
+				: NotFound("Couldn't find the movie");
 		}
 		catch
 		{
-			return Problem("Something went wrong");
+			return Problem();
 		}
-		
 	}
 	
 	[HttpGet]
-	public async Task<ActionResult<MovieWrap>> GetAll(int? from, int? to, string? orderBy, bool desc)
+	public async Task<IActionResult> GetAll(int? from, int? to, string? orderBy, bool desc)
 	{
-		var result = await _mService.GetAllAsync(from, to, orderBy, desc);
-		
-		return result.Count != 0
-			? Ok(result)
-			: NoContent();
+		try
+		{
+			var result = await _mService.GetAllAsync(from, to, orderBy, desc);
+			
+			return result.Count != 0
+				? Ok(result)
+				: NotFound("Couldn't find any movie");
+		}
+		catch
+		{
+			return Problem();
+		}
 	}
 	
 	[HttpGet("byActor/{id:int}")]
 	public async Task<IActionResult> GetAllByActor(int id, string? orderBy, int? from, int? to, bool desc)
 	{
-		var result = await _mService.GetAllByAsync(id, GetBy.Actor, from, to, orderBy, desc);
-		
-		return result.Count != 0
-			? Ok(result)
-			: NoContent();
+		try
+		{
+			var result = await _mService.GetAllByAsync(id, GetBy.Actor, from, to, orderBy, desc);
+			
+			return result.Count != 0
+				? Ok(result)
+				: NotFound("Couldn't find the movies");
+		}
+		catch
+		{
+			return Problem();
+		}
 	}
 	
 	[HttpGet("byGenre/{id:int}")]
@@ -61,11 +74,11 @@ public class MovieController : ControllerBase
 			
 			return result.Count != 0
 				? Ok(result)
-				: NoContent();
+				: NotFound("Coulnd't find the movies");
 		}
 		catch
 		{
-			return Problem("Something went wrong");
+			return Problem();
 		}
 	}
 	
@@ -74,14 +87,30 @@ public class MovieController : ControllerBase
 	{
 		try
 		{
-			var result = await _mService.SaveMovie(movie);
+			var result = await _mService.SaveAsync(movie);
 			return Ok(result);
 		}
 		catch
 		{
-			return Problem("Something went wrong");
+			return Problem();
 		}
 	}
 	
+	[HttpDelete("{id:int}")]
+	public async Task<IActionResult> Delete(int id)
+	{
+		try
+		{
+			var isDeleted = await _mService.DeleteAsync(id);
+			
+			return isDeleted
+				? Ok("Movie successfully deleted")
+				: NotFound("Couldn't find the movie");
+		}
+		catch
+		{
+			return Problem();
+		}
+	}
 	
 }

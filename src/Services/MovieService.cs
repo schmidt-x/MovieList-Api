@@ -3,7 +3,7 @@ using System.Data.SqlClient;
 using Dapper;
 using Dapper.Transaction;
 using Microsoft.Extensions.Configuration;
-using MovieApi.Models;
+using MovieApi.DTOs;
 using MovieApi.SqlQueries;
 using Serilog;
 
@@ -31,13 +31,13 @@ public class MovieService : IMovieService
 		try
 		{
 			using var cnn = CreateConnection();
-		
-			var unsorted = await cnn.QueryAsync<MovieGet, Actor, Genre, MovieGet>(MovieSql.GetById, (movie, actor, genre) =>
+			
+			var unsorted = await cnn.QueryAsync<MovieGet, ActorGet, GenreGet, MovieGet>(MovieSql.Get, (movie, actor, genre) =>
 			{
 				if (actor != null)
-					movie.Actors = new() { actor };
+					movie.Actors = new List<ActorGet> { actor };
 				if (genre != null)
-					movie.Genres = new() { genre };
+					movie.Genres = new List<GenreGet> { genre };
 				
 				return movie;
 			}, new { movieId = id }, splitOn: "Id, Id");
@@ -67,13 +67,13 @@ public class MovieService : IMovieService
 			
 			return result;
 		}
-		catch(Exception e)
+		catch(Exception ex)
 		{
-			Log.Error(e, "Something went wrong");
+			Log.Error(ex, "Something went wrong");
 			throw;
 		}
-	} 
-	public Task<MovieWrap> GetAllAsync(int? from, int? to, string? orderBy, bool desc)
+	}
+	public Task<Wrap<MoviesGet>> GetAllAsync(int? from, int? to, string? orderBy, bool desc)
 	{
 		var sql = MovieSql.GetAll;
 		
@@ -85,13 +85,13 @@ public class MovieService : IMovieService
 		
 		return GetAllAsync(sql, from, to);
 	}
-	public Task<MovieWrap> GetAllByAsync(int id, GetBy arg, int? from, int? to, string? orderBy, bool desc)
+	public Task<Wrap<MoviesGet>> GetAllByAsync(int id, GetBy arg, int? from, int? to, string? orderBy, bool desc)
 	{
 		string sql = arg switch
 		{
-			GetBy.Actor => MovieSql.ByActor,
-			GetBy.Genre => MovieSql.ByGenre,
-			_ => throw new Exception()
+			GetBy.Actor => MovieSql.GetAllByActor,
+			GetBy.Genre => MovieSql.GetAllByGenre,
+			_ => throw new ArgumentException("there is no way it can get here")
 		};
 		
 		if (from != null || to != null)
@@ -102,18 +102,27 @@ public class MovieService : IMovieService
 		
 		return GetAllAsync(sql, from, to, id);
 	}
-	public Task<string> SaveMovie(MoviePost movie)
+	public Task<string> SaveAsync(MoviePost movie)
 	{
-		foreach(var actor in movie.Actors)
-		{
-			if (actor.Info != "") continue;
-			var replaced = actor.Name.Replace(' ', '_');
-			actor.Info = $"https://en.wikipedia.org/wiki/{replaced}";
-		}
+		// probably I'll do something here before saving the movie in future
 		
 		return SaveMovieOnTransactAsync(movie);
 	}
-	
+	public async Task<bool> DeleteAsync(int id)
+	{
+		try
+		{
+			using var cnn = CreateConnection();
+			var isDeleted = await cnn.ExecuteAsync(MovieSql.Delete, new { movieId = id }) != 0;
+			Log.Information(isDeleted ? "Movie deleted" : "Couldn't find the movie");
+			return isDeleted;
+		}
+		catch(Exception ex)
+		{
+			Log.Error(ex, "Something went wrong");
+			throw;
+		}
+	}
 	
 	private string AddOrdering(string orderBy, bool desc)
 	{
@@ -139,13 +148,20 @@ public class MovieService : IMovieService
 		
 		return sql;
 	}
-	private async Task<MovieWrap> GetAllAsync(string sql, int? from, int? to, int? byId = null)
+	private async Task<Wrap<MoviesGet>> GetAllAsync(string sql, int? from, int? to, int? byId = null)
 	{
-		using var cnn = CreateConnection();
-		
-		var movies = (await cnn.QueryAsync<MoviesGet>(sql, new { from, to, byId })).ToList();
-		
-		return new MovieWrap { Count = movies.Count, Movies = movies };
+		try
+		{
+			using var cnn = CreateConnection();
+			var movies = (await cnn.QueryAsync<MoviesGet>(sql, new { from, to, byId })).ToList();
+			Log.Information("Movies are received from db");
+			return new Wrap<MoviesGet> { Count = movies.Count, List = movies };
+		}
+		catch(Exception ex)
+		{
+			Log.Error(ex, "Something went wrong");
+			throw;
+		}
 	}
 	private async Task<string> SaveMovieOnTransactAsync(MoviePost movie)
 	{
@@ -156,32 +172,32 @@ public class MovieService : IMovieService
 			cnn.Open();
 			using var transaction = cnn.BeginTransaction();
 			
-			using var multi = await transaction.QueryMultipleAsync(MovieSql.SaveMovie, movie);
-			var matched = await multi.ReadFirstAsync<bool>();
+			using var multi = await transaction.QueryMultipleAsync(MovieSql.Save, movie);
+			var isMatched = await multi.ReadFirstAsync<bool>();
 			var movieId = await multi.ReadFirstAsync<int>();
 			movieLink = $"https://localhost:7777/Movie/{movieId}";
 			
-			if (matched)
+			if (isMatched)
 			{
 				Log.Information("Movie duplicate");
-				return "This movie is added before\n" + movieLink;
+				return "This movie has already been added before\n" + movieLink;
 			}
+				
+			foreach(var actor in movie.Actors!)
+				await transaction.ExecuteAsync(ActorSql.Save, new { actor.Name, actor.Info, movieId });
+				
+			foreach(var genre in movie.Genres!)
+				await transaction.ExecuteAsync(GenreSql.Save, new { genre.Type, movieId });
 			
-			foreach(var actor in movie.Actors)
-				await transaction.ExecuteAsync(MovieSql.SaveActors, new { actor.Name, actor.Info, movieId });
-			
-			foreach(var genre in movie.Genres)
-				await transaction.ExecuteAsync(MovieSql.SaveGenres, new { genre.Type, movieId });
 			transaction.Commit();
+			Log.Information("Movie is saved into db"); 
 		}
-		catch(Exception e)
+		catch(Exception ex)
 		{
-			Log.Error(e, "something went wrong");
+			Log.Error(ex, "Something went wrong");
 			throw;
 		}
 		
-		Log.Information("Movie is saved"); 
 		return "The movie is saved successfully\n" + movieLink;
 	}
-	
 }
