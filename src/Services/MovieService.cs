@@ -5,16 +5,17 @@ using Dapper.Transaction;
 using Microsoft.Extensions.Configuration;
 using MovieApi.DTOs;
 using MovieApi.SqlQueries;
-using Serilog;
+using Microsoft.Extensions.Logging;
 
 namespace MovieApi.Services;
 
 public class MovieService : IMovieService
 {
 	private readonly string? _connectionString;
+	private readonly ILogger<MovieService> _logger;
 	private readonly Dictionary<string, string> _orderBy;
 	private IDbConnection CreateConnection() => new SqlConnection(_connectionString);
-	public MovieService(IConfiguration config)
+	public MovieService(IConfiguration config, ILogger<MovieService> logger)
 	{
 		_connectionString = config.GetConnectionString("Default");
 		_orderBy = new()
@@ -23,6 +24,7 @@ public class MovieService : IMovieService
 			{"released", " ORDER BY Movie.Released"},
 			{"duration", " ORDER BY Movie.Duration"}
 		};
+		_logger = logger;
 	}
 	
 	
@@ -64,12 +66,11 @@ public class MovieService : IMovieService
 			
 				return movie;
 			}).FirstOrDefault();
-			
 			return result;
 		}
 		catch(Exception ex)
 		{
-			Log.Error(ex, "Something went wrong");
+			_logger.LogError(ex, "Failed to get the movie");
 			throw;
 		}
 	}
@@ -102,24 +103,32 @@ public class MovieService : IMovieService
 		
 		return GetAllAsync(sql, from, to, id);
 	}
-	public Task<string> SaveAsync(MoviePost movie)
+	public Task<string> SaveAsync(MoviePost movie, int[] actorId, int[] genreId)
 	{
-		// probably I'll do something here before saving the movie in future
+		// probably in future I'll do something here before saving the movie
 		
-		return SaveMovieOnTransactAsync(movie);
+		return SaveMovieOnTransactAsync(movie, actorId, genreId);
 	}
-	public async Task<bool> DeleteAsync(int id)
+	public async Task<int> DeleteAsync(int[] ids)
 	{
 		try
 		{
 			using var cnn = CreateConnection();
-			var isDeleted = await cnn.ExecuteAsync(MovieSql.Delete, new { movieId = id }) != 0;
-			Log.Information(isDeleted ? "Movie deleted" : "Couldn't find the movie");
-			return isDeleted;
+			
+			// number of movies deleted
+			int deleted = 0; 
+			
+			foreach(var id in ids)
+			{
+				if (await cnn.ExecuteAsync(MovieSql.Delete, new { movieId = id }) > 0)
+					deleted++;
+			}
+			
+			return deleted;
 		}
 		catch(Exception ex)
 		{
-			Log.Error(ex, "Something went wrong");
+			_logger.LogError(ex, "Failed to delete the movies");
 			throw;
 		}
 	}
@@ -154,47 +163,67 @@ public class MovieService : IMovieService
 		{
 			using var cnn = CreateConnection();
 			var movies = (await cnn.QueryAsync<MoviesGet>(sql, new { from, to, byId })).ToList();
-			Log.Information("Movies are received from db");
 			return new Wrap<MoviesGet> { Count = movies.Count, List = movies };
 		}
 		catch(Exception ex)
 		{
-			Log.Error(ex, "Something went wrong");
+			_logger.LogError(ex, "Failed to get the movies");
 			throw;
 		}
 	}
-	private async Task<string> SaveMovieOnTransactAsync(MoviePost movie)
+	private async Task<string> SaveMovieOnTransactAsync(MoviePost movie, int[] actorId, int[] genreId)
 	{
+		bool isRolledBack = false;
 		string movieLink;
 		try
 		{
 			using var cnn = CreateConnection();
 			cnn.Open();
 			using var transaction = cnn.BeginTransaction();
-			
-			using var multi = await transaction.QueryMultipleAsync(MovieSql.Save, movie);
-			var isMatched = await multi.ReadFirstAsync<bool>();
-			var movieId = await multi.ReadFirstAsync<int>();
-			movieLink = $"https://localhost:7777/Movie/{movieId}";
-			
-			if (isMatched)
+			try
 			{
-				Log.Information("Movie duplicate");
-				return "This movie has already been added before\n" + movieLink;
+				using var multi = await transaction.QueryMultipleAsync(MovieSql.Save, movie);
+				var isMatched = multi.ReadFirst<bool>();
+				var movieId = multi.ReadFirst<int>();
+				movieLink = $"https://localhost:7001/Movie/{movieId}";
+				
+				if (isMatched)
+					return "The movie already exists\n" + movieLink;
+				
+				foreach(var id in actorId)
+				{
+					var isAttached = await transaction.ExecuteAsync(ActorSql.Attach, new { actorId = id, movieId }) > 0;
+					if (isAttached) continue;
+					throw new ArgumentException($"Actor '{id}' is not valid", nameof(actorId));
+				}
+				
+				foreach(var id in genreId)
+				{
+					var isAttached = await transaction.ExecuteAsync(GenreSql.Attach, new { genreid = id, movieId }) > 0;
+					if (isAttached) continue;
+					throw new ArgumentException($"Genre '{id}' is not valid", nameof(genreId));
+				}
+				
+				foreach(var actor in movie.Actors!)
+					await transaction.ExecuteAsync(ActorSql.SaveAndAttach, new { actor.Name, actor.Info, movieId });
+				
+				foreach(var genre in movie.Genres!)
+					await transaction.ExecuteAsync(GenreSql.SaveAndAttach, new { genre.Type, movieId });
+				
+				transaction.Commit();
 			}
-				
-			foreach(var actor in movie.Actors!)
-				await transaction.ExecuteAsync(ActorSql.Save, new { actor.Name, actor.Info, movieId });
-				
-			foreach(var genre in movie.Genres!)
-				await transaction.ExecuteAsync(GenreSql.Save, new { genre.Type, movieId });
-			
-			transaction.Commit();
-			Log.Information("Movie is saved into db"); 
+			catch(Exception ex)
+			{
+				transaction.Rollback();
+				isRolledBack = true;
+				_logger.LogError(ex, "Transaction failed");
+				throw;
+			}
 		}
 		catch(Exception ex)
 		{
-			Log.Error(ex, "Something went wrong");
+			if (!isRolledBack)
+				_logger.LogError(ex, "Failed to open connection/begin transaction");
 			throw;
 		}
 		

@@ -30,6 +30,20 @@ public class GenreController : ControllerBase
 		}
 	}
 	
-	
+	[HttpDelete]
+	public async Task<IActionResult> Delete([FromQuery] int[] id)
+	{
+		try
+		{
+			int deletedGenres = await _membersService.DeleteAsync(id, GenreSql.Delete);
+			return deletedGenres > 0
+				? Ok($"Genres deleted ({deletedGenres})")
+				: NotFound("Couldn't find any genre to delete");
+		}
+		catch
+		{
+			return Problem();
+		}
+	}
 	
 }

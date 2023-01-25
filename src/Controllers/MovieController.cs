@@ -49,7 +49,7 @@ public class MovieController : ControllerBase
 	}
 	
 	[HttpGet("byActor/{id:int}")]
-	public async Task<IActionResult> GetAllByActor(int id, string? orderBy, int? from, int? to, bool desc)
+	public async Task<IActionResult> GetAllByActor(int id, int? from, int? to, string? orderBy, bool desc)
 	{
 		try
 		{
@@ -57,7 +57,7 @@ public class MovieController : ControllerBase
 			
 			return result.Count != 0
 				? Ok(result)
-				: NotFound("Couldn't find the movies");
+				: NotFound("Couldn't find any movie");
 		}
 		catch
 		{
@@ -66,7 +66,7 @@ public class MovieController : ControllerBase
 	}
 	
 	[HttpGet("byGenre/{id:int}")]
-	public async Task<IActionResult> GetAllByGenre(int id, string? orderBy, int? from, int? to, bool desc)
+	public async Task<IActionResult> GetAllByGenre(int id, int? from, int? to, string? orderBy, bool desc)
 	{
 		try
 		{
@@ -74,7 +74,7 @@ public class MovieController : ControllerBase
 			
 			return result.Count != 0
 				? Ok(result)
-				: NotFound("Coulnd't find the movies");
+				: NotFound("Coulnd't find any movie");
 		}
 		catch
 		{
@@ -83,12 +83,31 @@ public class MovieController : ControllerBase
 	}
 	
 	[HttpPost]
-	public async Task<IActionResult> Save(MoviePost movie)
+	public async Task<IActionResult> Save(MoviePost movie, [FromQuery] int[] actorId, [FromQuery] int[] genreId)
 	{
 		try
 		{
-			var result = await _mService.SaveAsync(movie);
+			var result = await _mService.SaveAsync(movie, actorId, genreId);
 			return Ok(result);
+		}
+		catch(Exception ex)
+		{
+			return ex is ArgumentException
+				? Problem(ex.Message)
+				: Problem();
+		}
+	}
+	
+	[HttpDelete]
+	public async Task<IActionResult> Delete([FromQuery] int[] id)
+	{
+		try
+		{
+			int deletedMovies = await _mService.DeleteAsync(id);
+			
+			return deletedMovies > 0
+				? Ok($"Movies successfully deleted ({deletedMovies})")
+				: NotFound("Couldn't find any movie to delete");
 		}
 		catch
 		{
@@ -96,21 +115,51 @@ public class MovieController : ControllerBase
 		}
 	}
 	
-	[HttpDelete("{id:int}")]
-	public async Task<IActionResult> Delete(int id)
+	[HttpPut]
+	public Task<IActionResult> Update()
 	{
-		try
-		{
-			var isDeleted = await _mService.DeleteAsync(id);
-			
-			return isDeleted
-				? Ok("Movie successfully deleted")
-				: NotFound("Couldn't find the movie");
-		}
-		catch
-		{
-			return Problem();
-		}
+		throw new NotImplementedException();
 	}
 	
 }
+
+/*
+	https://localhost:7001/Movie
+  
+  // GET // 
+  
+  /1 => get a single movie by id
+  
+	/ => get all the movies
+		? orderBy=(released(int) / title(string) / duration(int)) => sorting the movies
+		& desc=true => sort descending 
+    & from=2002 => from released date
+		& to=2010   => up to released date
+		 
+	/byActor/3 => get all the movies with specified actor
+	/byGenre/3 => get all movies with specified genre
+		*the same query params for sorting*
+	
+	
+	// POST //
+	
+	/ => save the movie
+		the movie
+		{
+			movie's json
+		}
+		?actorId=1 & actorId=2 => existing actor's ids
+		&genreId=1 & genreId=2 => existing genre's ids
+		
+	// DELETE //
+	
+	/? id=1 & id=3 => delete the movies
+	
+	
+	// UPDATE //
+	
+	
+	
+	
+	
+*/

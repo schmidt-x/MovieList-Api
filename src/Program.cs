@@ -11,7 +11,7 @@ public class Program
 		
 		builder.Host.UseSerilog((_, config) =>
 			config.ReadFrom.Configuration(builder.Configuration));
-			
+		
 		builder.Services.AddHttpContextAccessor(); // for Serilog.Enrichers 
 		builder.Services.AddControllers();
 		
@@ -19,7 +19,6 @@ public class Program
 		builder.Services.AddSingleton<IMemberService, MemberService>();
 		
 		var app = builder.Build();
-		
 		app.UseSerilogRequestLogging();
 		app.MapControllers();
 		

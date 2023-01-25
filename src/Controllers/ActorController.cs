@@ -30,20 +30,19 @@ public class ActorController : ControllerBase
 		}
 	}
 	
-	[HttpDelete("{id:int}")]
-	public async Task<IActionResult> Delete(int id)
+	[HttpDelete]
+	public async Task<IActionResult> Delete([FromQuery] int[] id)
 	{
 		try
 		{
-			var isDeleted = await _membersService.DeleteAsync(id, ActorSql.Delete);
-			return isDeleted
-				? Ok("Actor deleted")
-				: NotFound("Couldn't find the actor");
+			int deletedActors = await _membersService.DeleteAsync(id, ActorSql.Delete);
+			return deletedActors > 0
+				? Ok($"Actors deleted ({deletedActors})")
+				: NotFound("Couldn't find any actor to delete");
 		}
 		catch
 		{
 			return Problem();
 		}
-		
 	}
 }
