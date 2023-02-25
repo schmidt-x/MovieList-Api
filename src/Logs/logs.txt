@@ -1,4 +1,0 @@
-2023-01-25 21:23:38.852 +03:00 [ERR] Transaction failed
-System.ArgumentException: Actor '21' is not valid (Parameter 'actorId')
-   at MovieApi.Services.MovieService.SaveMovieOnTransactAsync(MoviePost movie, Int32[] actorId, Int32[] genreId) in C:\CS\Web\MovieApi\src\Services\MovieService.cs:line 197
-2023-01-25 21:23:38.887 +03:00 [ERR] HTTP POST /Movie responded 500 in 317.5102 ms

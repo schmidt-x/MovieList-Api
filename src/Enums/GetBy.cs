@@ -1,4 +1,4 @@
-﻿namespace MovieApi;
+﻿namespace MovieApi.Enums;
 
 public enum GetBy
 {

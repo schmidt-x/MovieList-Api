@@ -14,7 +14,7 @@
       "dotnetRunMessages": true,
       "launchBrowser": false,
       "launchUrl": "",
-      "applicationUrl": "https://localhost:7001;http://localhost:6001",
+      "applicationUrl": "https://localhost:7001",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       }
