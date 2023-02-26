@@ -1,6 +1,5 @@
-using Microsoft.Extensions.Configuration;
 using MovieApi.Middleware;
-using MovieApi.Repository;
+using MovieApi.Repositories;
 using MovieApi.Services;
 using Serilog;
 
@@ -21,12 +20,13 @@ public class Program
 				policy.WithOrigins("http://localhost:63342");
 			});
 		});
-		builder.Configuration.AddJsonFile("Properties\\launchSettings.json");
 		builder.Services.AddControllers();
 		builder.Services.AddHttpContextAccessor();
 		builder.Services.AddSingleton<IMovieService, MovieService>();
 		builder.Services.AddSingleton<IMovieRepository, MovieRepository>();
-		builder.Services.AddSingleton<IMemberService, MemberService>();
+		builder.Services.AddSingleton<IActorService, ActorService>();
+		// builder.Services.AddSingleton<IGenreService, GenreService>();
+		builder.Services.AddSingleton<IMemberRepository, MemberRepository>();
 		builder.Services.AddSingleton<ActionService>();
 		
 		var app = builder.Build();

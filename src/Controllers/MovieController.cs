@@ -1,7 +1,8 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using MovieApi.DTOs;
-using MovieApi.Services;
+using MovieApi.Repositories;
 using MovieApi.Enums;
+using MovieApi.Services;
 
 namespace MovieApi.Controllers;
 
@@ -20,41 +21,41 @@ public class MovieController : ControllerBase
 	[HttpGet("{id:int}")]
 	public async Task<ActionResult<MovieGet>> Get(int id)
 	{
-		var result = await _mService.GetAsync(id);
+		var movie = await _mService.GetAsync(id);
 		
-		return result != null
-			? Ok(result)
+		return movie != null
+			? Ok(movie)
 			: NotFound(new { error = "Movie not found" });
 	}
 	
 	[HttpGet]
 	public async Task<ActionResult<Wrap<MoviesGet>>> GetAll(int? from, int? to, string? orderBy, bool desc)
 	{
-		var result = await _mService.GetAllAsync(from, to, orderBy, desc);
+		var movies = await _mService.GetAllAsync(from, to, orderBy, desc);
 		
-		return result.Count > 0
-			? Ok(result)
-			: NotFound("Movies not found");
+		return movies.Count > 0
+			? Ok(movies)
+			: NotFound(new { error = "Movies not found" });
 	}
 	
 	[HttpGet("byActor/{id:int}")]
 	public async Task<ActionResult<Wrap<MoviesGet>>> GetAllByActor(int id, int? from, int? to, string? orderBy, bool desc)
 	{
-		var result = await _mService.GetAllByAsync(id, GetBy.Actor, from, to, orderBy, desc);
+		var movies = await _mService.GetAllByAsync(id, GetBy.Actor, from, to, orderBy, desc);
 		
-		return result.Count != 0
-			? Ok(result)
-			: NotFound("Movies not found");
+		return movies.Count != 0
+			? Ok(movies)
+			: NotFound(new { error = "Movies not found" });
 	}
 	
 	[HttpGet("byGenre/{id:int}")]
 	public async Task<ActionResult<Wrap<MoviesGet>>> GetAllByGenre(int id, int? from, int? to, string? orderBy, bool desc)
 	{
-		var result = await _mService.GetAllByAsync(id, GetBy.Genre, from, to, orderBy, desc);
+		var movies = await _mService.GetAllByAsync(id, GetBy.Genre, from, to, orderBy, desc);
 		
-		return result.Count > 0
-			? Ok(result)
-			: NotFound("Movies not found");
+		return movies.Count > 0
+			? Ok(movies)
+			: NotFound(new { error = "Movies not found" });
 	}
 	
 	[HttpPost]
@@ -68,16 +69,20 @@ public class MovieController : ControllerBase
 	[HttpDelete]
 	public async Task<IActionResult> Delete([FromQuery] int[] movieId)
 	{
-		await _mService.DeleteAsync(movieId);
+		var isDeleted = await _mService.DeleteAsync(movieId);
 		
-		return NoContent();
+		return isDeleted
+			? NoContent()
+			: NotFound(new { error = "Movie(s) not found" });
 	}
 	
-	[HttpPut]
-	public async Task<ActionResult<MovieGet>> Update(MoviePost movie, [FromQuery] int[] actorIdDel, [FromQuery] int[] genreIdDel, [FromQuery] int[] actorIdAdd, [FromQuery] int[] genreIdAdd)
+	[HttpPut("{id:int}")]
+	public async Task<ActionResult<MovieGet>> Update(int id, MoviePut movie, [FromQuery] int[] actorIdDel, [FromQuery] int[] genreIdDel, [FromQuery] int[] actorIdAdd, [FromQuery] int[] genreIdAdd)
 	{
-		var result = await _mService.UpdateAsync(movie, actorIdDel, genreIdDel, actorIdAdd, genreIdAdd);
+		bool isUpdated = await _mService.UpdateAsync(id, movie, actorIdDel, genreIdDel, actorIdAdd, genreIdAdd);
 		
-		return Ok(result);
+		return isUpdated
+			? Ok()
+			: NotFound(new { error = "Movie not found" });
 	}
 }

@@ -6,7 +6,7 @@ using Microsoft.Extensions.Configuration;
 using MovieApi.DTOs;
 using MovieApi.SqlQueries;
 
-namespace MovieApi.Repository;
+namespace MovieApi.Repositories;
 
 public class MovieRepository : IMovieRepository
 {
@@ -110,7 +110,7 @@ public class MovieRepository : IMovieRepository
 		
 		return movieId;
 	}
-	public async Task QueryDeleteAsync(int[] movieId)
+	public async Task<bool> QueryDeleteAsync(int[] movieId)
 	{
 		using var cnn = CreateConnection();
 		int deleted = 0; 
@@ -119,14 +119,51 @@ public class MovieRepository : IMovieRepository
 			if (await cnn.ExecuteAsync(MovieSql.Delete, new { movieId = id }) > 0)
 				deleted++;
 		
-		if (deleted <= 0)
-			throw new ArgumentException("Movie(s) not valid", nameof(movieId));
+		return deleted > 0;
 	}
-	public async Task<MovieGet> QueryUpdateAsync(MoviePost movie, int[] actorIdDel, int[] genreIdDel, int[] actorIdAdd, int[] genreIdAdd)
+	public async Task<bool> QueryUpdateAsync(int id, MoviePut movie, int[] actorIdDel, int[] genreIdDel, int[] actorIdAdd, int[] genreIdAdd)
 	{
+		using var cnn = CreateConnection();
+		cnn.Open();
+		using var transaction = cnn.BeginTransaction();
 		
+		var movieId = id;
+		try
+		{
+			bool isUpdated = await transaction.QuerySingleAsync<bool>( 
+				MovieSql.Update, 
+				new {
+					movieId,
+					movie.Title,
+					movie.Release,
+					movie.Country,
+					movie.Duration,
+					movie.About
+				});
+			
+			if (!isUpdated)
+				return false;
+			
+			foreach(var actorId in actorIdDel)
+				await transaction.ExecuteAsync(ActorSql.Detach, new { actorId, movieId });
+			
+			foreach(var genreId in genreIdDel)
+				await transaction.ExecuteAsync(GenreSql.Detach, new { genreId, movieId });
+			
+			foreach(var actorId in actorIdAdd)
+				await transaction.ExecuteAsync(ActorSql.Attach, new { actorId, movieId });
+			
+			foreach(var genreId in genreIdAdd)
+				await transaction.ExecuteAsync(GenreSql.Attach, new { genreId, movieId });
+			
+			transaction.Commit();
+		}
+		catch
+		{
+			transaction.Rollback();
+			throw;
+		}
 		
-		
-		throw new NotImplementedException();
+		return true;
 	}
 }

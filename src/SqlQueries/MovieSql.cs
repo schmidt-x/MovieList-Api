@@ -3,22 +3,22 @@
 public static class MovieSql
 {
 	public const string GetAll = @"
-		SELECT Id, Title, Duration, Release, About From Movie";
+		SELECT Id, Title, Release, Country, Duration From Movie";
 	
 	public const string GetAllByActor = @"
-		SELECT Movie.Id, Title, Duration, Release, About FROM Movie
+		SELECT Movie.Id, Title, Release, Country, Duration FROM Movie
 		INNER JOIN ActorMovie am ON Movie.Id = am.Movie_id
 		INNER JOIN Actor ON Actor.Id = am.Actor_id
 		WHERE Actor.Id = @byId";
 			
 	public const string GetAllByGenre = @"
-		SELECT Movie.Id, Title, Duration, Release, About FROM Movie
+		SELECT Movie.Id, Title, Release, Country, Duration FROM Movie
 		INNER JOIN GenreMovie am ON Movie.Id = am.Movie_id
 		INNER JOIN Genre ON Genre.Id = am.Genre_id
 		WHERE Genre.Id = @byId";
 		
 	public const string Get = @"
-		SELECT Movie.Id, Movie.Title, Movie.Duration, Movie.Release, Movie.Country, Movie.About,
+		SELECT Movie.Id, Movie.Title, Movie.Release, Movie.Country, Movie.Duration, Movie.About,
 					 Actor.Id, Actor.Name, Actor.Info, 
 					 Genre.Id, Genre.Type
 		FROM Movie
@@ -36,8 +36,8 @@ public static class MovieSql
 		WHEN MATCHED THEN
 			UPDATE SET @isMatched = 1, @movieId = t.Id
 		WHEN NOT MATCHED THEN
-			INSERT (Title, Duration, Release, Country, About)
-			VALUES (s.Title, @Duration, s.Release, @Country, @About);
+			INSERT (Title, Release, Country, Duration, About)
+			VALUES (s.Title, s.Release, @Country, @Duration, @About);
 		SELECT @isMatched
 		SELECT ISNULL(@movieId, SCOPE_IDENTITY())";
 	
@@ -47,8 +47,13 @@ public static class MovieSql
 		DELETE FROM Movie WHERE Id = @movieId";
 	
 	public const string Update = @" 
-		
-		
-		"; // TODO
-	
+		IF EXISTS (SELECT 1 FROM Movie WHERE Id = @movieId)
+		BEGIN
+			UPDATE Movie
+			SET Title = @Title, Release = @Release, Country = @Country, Duration = @Duration, About = @About
+			WHERE Id = @movieId
+			SELECT 1
+		END
+		ELSE
+			SELECT 0";
 }

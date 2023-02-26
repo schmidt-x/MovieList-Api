@@ -1,7 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using MovieApi.DTOs;
+using MovieApi.Repositories;
 using MovieApi.Services;
-using MovieApi.SqlQueries;
 
 namespace MovieApi.Controllers;
 
@@ -9,40 +9,41 @@ namespace MovieApi.Controllers;
 [Route("[controller]")]
 public class ActorController : ControllerBase
 {
-	private readonly IMemberService _membersService;
-	public ActorController(IMemberService membersService) =>
-		_membersService = membersService;
+	private readonly IActorService _aService;
+	private readonly ActionService _action;
+	public ActorController(IActorService aService, ActionService action)
+	{
+		_aService = aService;
+		_action = action;
+	}
+	
+	[HttpGet("{id:int}")]
+	public async Task<ActionResult<ActorGet>> Get(int id)
+	{
+		var result = await _aService.GetAsync(id);
+		
+		return result != null
+			? Ok(result)
+			: NotFound(new { error = "Actor not found" });
+	}
 	
 	[HttpGet]
-	public async Task<IActionResult> GetAll()
+	public async Task<ActionResult<Wrap<ActorGet>>> GetAll()
 	{
-		try
-		{
-			var result = await _membersService.GetAllAsync<ActorGet>(ActorSql.GetAll);
-			
-			return result.Count != 0
-				? Ok(result)
-				: NotFound("Couldn't find any actor");
-		}
-		catch
-		{
-			return Problem();
-		}
+		var actors = await _aService.GetAllAsync();
+		
+		return actors.Count > 0
+			? Ok(actors)
+			: NotFound(new { error = "Actor(s) not found" });
 	}
 	
-	[HttpDelete]
-	public async Task<IActionResult> Delete([FromQuery] int[] id)
+	[HttpPost]
+	public async Task<IActionResult> Save(ActorPost actor)
 	{
-		try
-		{
-			int deletedActors = await _membersService.DeleteAsync(id, ActorSql.Delete);
-			return deletedActors > 0
-				? Ok($"Actors deleted ({deletedActors})")
-				: NotFound("Couldn't find any actor to delete");
-		}
-		catch
-		{
-			return Problem();
-		}
+		var id = await _aService.SaveAsync(actor);
+		
+		return _action.Created(id, actor.Name!);
 	}
+	
+	
 }

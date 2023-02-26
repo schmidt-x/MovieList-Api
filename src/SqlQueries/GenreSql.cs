@@ -20,6 +20,9 @@ public static class GenreSql
 	public const string Attach = @"
 		IF EXISTS (SELECT 1 FROM Genre WHERE Id = @genreId)
 			INSERT INTO GenreMovie (Genre_id, Movie_id) VALUES (@genreId, @movieId)";
+	
+	public const string Detach = @"
+		DELETE FROM GenreMovie WHERE Genre_id = @genreId";
 		
 	public const string Delete = @"
 		DELETE FROM GenreMovie WHERE Genre_id = @actorId

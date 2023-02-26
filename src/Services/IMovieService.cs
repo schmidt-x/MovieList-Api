@@ -1,7 +1,7 @@
 ﻿using MovieApi.DTOs;
 using MovieApi.Enums;
 
-namespace MovieApi.Services;
+namespace MovieApi.Repositories;
 
 public interface IMovieService
 {
@@ -9,6 +9,6 @@ public interface IMovieService
 	Task<Wrap<MoviesGet>> GetAllAsync(int? from, int? to, string? orderBy, bool desc);
 	Task<Wrap<MoviesGet>> GetAllByAsync(int id, GetBy arg, int? from, int? to, string? orderBy, bool desc);
 	Task<int> SaveAsync(MoviePost movie, int[] actorId, int[] genreId);
-	Task DeleteAsync(int[] movieId);
-	Task<MovieGet> UpdateAsync(MoviePost movie, int[] actorIdDel, int[] genreIdDel, int[] actorIdAdd, int[] genreIdAdd);
+	Task<bool> DeleteAsync(int[] movieId);
+	Task<bool> UpdateAsync(int id, MoviePut movie, int[] actorIdDel, int[] genreIdDel, int[] actorIdAdd, int[] genreIdAdd);
 }
